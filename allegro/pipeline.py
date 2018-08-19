@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 from sklearn.base import (BaseEstimator, TransformerMixin, RegressorMixin,
@@ -27,7 +28,7 @@ class VarianceThresholdDF(VarianceThreshold):
         return X[used_cols]
 
 
-class UniqueTransformer(BaseEstimator, TransformerMixin):
+class FilterUnique(BaseEstimator, TransformerMixin):
     def __init__(self, axis=1):
         self.axis = axis
 
@@ -44,7 +45,7 @@ class UniqueTransformer(BaseEstimator, TransformerMixin):
             raise NotImplementedError()
 
 
-class XGBImportanceFilter(BaseEstimator, TransformerMixin):
+class FilterXGBImportance(BaseEstimator, TransformerMixin):
     def __init__(self, n_features, **xgb_params):
         self.n_features = n_features
         self.model = None
@@ -85,12 +86,82 @@ class XGBImportanceFilter(BaseEstimator, TransformerMixin):
 # ------------------------------------------------------------------------------
 # converter
 # ------------------------------------------------------------------------------
-class LnTransformer(BaseEstimator, TransformerMixin):
+class ConvertToLog1p(BaseEstimator, TransformerMixin):
     def fit(self, *_):
         return self
 
     def transform(self, X, *_):
         return np.sign(X) * np.log1p(np.abs(X))
+
+
+class ConvertToCategory(BaseEstimator, TransformerMixin):
+    def fit(self, *_):
+        return self
+
+    def transform(self, X, *_):
+        X = X.copy(True)
+        object_columns = X.select_dtypes(object).columns
+        n_category = X.loc[:, object_columns].nunique()
+
+        warning_flgs = n_category > (X.shape[0] * 0.5)
+        if warning_flgs.any():
+            warnings.warn('Some columns contain too many categories: {}'
+                          .format(n_category[warning_flgs].index))
+
+        X.loc[:, object_columns] = X.loc[:, object_columns].astype('category')
+        return X
+
+
+class ConvertNaNs(BaseEstimator, TransformerMixin):
+    def __init__(self, **float_config):
+        self.float_median = float_config.pop('median', [])
+        self.float_mode = float_config.pop('mode', [])
+        self.float_pad = float_config.pop('pad', [])
+
+        self.float_median = self._to_list(self.float_median)
+        self.float_mode = self._to_list(self.float_mode)
+        self.float_pad = self._to_list(self.float_pad)
+
+    @staticmethod
+    def _to_list(value):
+        if isinstance(value, list):
+            return value
+        else:
+            return [value]
+
+    def fit(self, *_):
+        return self
+
+    def transform(self, X, *_):
+        """ Transform missing values
+
+        float columns
+            fill with median by default
+
+        object columns
+            do nothing at the moment
+        """
+        X = X.copy(True)
+        na_columns = X.columns[X.isna().any()]
+        na_float = X.loc[:, na_columns].select_dtypes(float).columns
+        na_object = X.loc[:, na_columns].select_dtypes(object).columns
+        na_category = X.loc[:, na_columns].select_dtypes('category').columns
+        na_remaining = (set(na_columns) - set(na_float) - set(na_object) -
+                        set(na_category))
+
+        if len(na_remaining) != 0:
+            raise ValueError('Unrecognised na columns: {}'.format(na_remaining))
+
+        # float columns
+        for i in na_float:
+            if i in self.float_mode:
+                X[i] = X[i].fillna(X[i].mode())
+            elif i in self.float_pad:
+                X[i] = X[i].fillna(method='pad')
+            else:
+                X[i] = X[i].fillna(X[i].median())
+
+        return X
 
 
 # ------------------------------------------------------------------------------
@@ -104,7 +175,7 @@ class FeatureUnionDF(FeatureUnion):
         return Xs
 
 
-class DoNothing(BaseEstimator, TransformerMixin):
+class FeatureRaw(BaseEstimator, TransformerMixin):
     def fit(self, *_):
         return self
 
@@ -112,7 +183,7 @@ class DoNothing(BaseEstimator, TransformerMixin):
         return X
 
 
-class TransformedFeatures(BaseEstimator, TransformerMixin):
+class FeatureTransformed(BaseEstimator, TransformerMixin):
     def __init__(self, estimator, name=None):
         self.estimator = estimator
         self.name = name or self.estimator.__class__.__name__
@@ -129,7 +200,7 @@ class TransformedFeatures(BaseEstimator, TransformerMixin):
         return df
 
 
-class AggFeatures(BaseEstimator, TransformerMixin):
+class FeatureAggregated(BaseEstimator, TransformerMixin):
     def fit(self, *_):
         return self
 
@@ -163,7 +234,7 @@ class AggFeatures(BaseEstimator, TransformerMixin):
 # ------------------------------------------------------------------------------
 # model
 # ------------------------------------------------------------------------------
-class AveragingModels(BaseEstimator, RegressorMixin, TransformerMixin):
+class ModelEnsemble(BaseEstimator, RegressorMixin, TransformerMixin):
     def __init__(self, models):
         self.models = models
 
