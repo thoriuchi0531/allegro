@@ -6,6 +6,7 @@ from sklearn.base import (BaseEstimator, TransformerMixin, RegressorMixin,
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.pipeline import FeatureUnion
+from sklearn.preprocessing import Imputer
 import xgboost as xgb
 
 
@@ -108,60 +109,81 @@ class ConvertToCategory(BaseEstimator, TransformerMixin):
             warnings.warn('Some columns contain too many categories: {}'
                           .format(n_category[warning_flgs].index))
 
-        X.loc[:, object_columns] = X.loc[:, object_columns].astype('category')
+        # convert NaN to string for potential label encoding
+        X.loc[:, object_columns] = (X.loc[:, object_columns].fillna('NaN')
+                                    .astype('category'))
         return X
 
 
-class ConvertNaNs(BaseEstimator, TransformerMixin):
-    def __init__(self, **float_config):
-        self.float_median = float_config.pop('median', [])
-        self.float_mode = float_config.pop('mode', [])
-        self.float_pad = float_config.pop('pad', [])
+class ConvertNaNs(Imputer):
+    def __init__(self, missing_values="NaN", strategy="mean",
+                 axis=0, verbose=0, copy=True, target_columns=float):
+        # scikit-learn estimators should always specify their parameters
+        # in the signature of their __init__ (no varargs).
+        self.col_all = None
+        self.cols_to_convert = None
+        self.target_columns = target_columns
+        super(ConvertNaNs, self).__init__(
+            missing_values, strategy, axis, verbose, copy
+        )
 
-        self.float_median = self._to_list(self.float_median)
-        self.float_mode = self._to_list(self.float_mode)
-        self.float_pad = self._to_list(self.float_pad)
-
-    @staticmethod
-    def _to_list(value):
-        if isinstance(value, list):
-            return value
-        else:
-            return [value]
-
-    def fit(self, *_):
+    def fit(self, X, *_):
+        self.col_all = X.columns
+        if self.target_columns in (float, int):
+            self.cols_to_convert = X.select_dtypes(self.target_columns).columns
+        elif isinstance(self.target_columns, str):
+            self.cols_to_convert = [self.target_columns]
+        elif isinstance(self.target_columns, list):
+            self.cols_to_convert = self.target_columns
+        super(ConvertNaNs, self).fit(X[self.cols_to_convert])
         return self
 
     def transform(self, X, *_):
-        """ Transform missing values
+        col_original = X.columns
+        col_others = list(set(self.col_all) - set(self.cols_to_convert))
+        transformed = super(ConvertNaNs, self).transform(X[self.cols_to_convert])
+        transformed = pd.DataFrame(transformed, index=X.index,
+                                   columns=self.cols_to_convert)
+        result = pd.concat((
+            X[col_others],
+            transformed
+        ), axis=1).reindex(columns=col_original)
+        return result
 
-        float columns
-            fill with median by default
 
-        object columns
-            do nothing at the moment
-        """
-        X = X.copy(True)
-        na_columns = X.columns[X.isna().any()]
-        na_float = X.loc[:, na_columns].select_dtypes(float).columns
-        na_object = X.loc[:, na_columns].select_dtypes(object).columns
-        na_category = X.loc[:, na_columns].select_dtypes('category').columns
-        na_remaining = (set(na_columns) - set(na_float) - set(na_object) -
-                        set(na_category))
+class ConvertOneHotEncoding(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        self.category_columns = None
+        self.ohe_columns = None
 
-        if len(na_remaining) != 0:
-            raise ValueError('Unrecognised na columns: {}'.format(na_remaining))
+    def fit(self, X, *_):
+        self.category_columns = X.select_dtypes('category').columns
+        self.ohe_columns = pd.get_dummies(X[self.category_columns]).columns
+        return self
 
-        # float columns
-        for i in na_float:
-            if i in self.float_mode:
-                X[i] = X[i].fillna(X[i].mode())
-            elif i in self.float_pad:
-                X[i] = X[i].fillna(method='pad')
-            else:
-                X[i] = X[i].fillna(X[i].median())
+    def transform(self, X, *_):
+        col_others = list(set(X.columns) - set(self.category_columns))
+        transformed = pd.get_dummies(X[self.category_columns])
 
-        return X
+        if set(transformed.columns) != set(self.ohe_columns):
+            in_original_not_in_new = (set(self.ohe_columns) -
+                                      set(transformed.columns))
+            not_in_original_in_new = (set(transformed.columns) -
+                                      set(self.ohe_columns))
+            warnings.warn(
+                '\nPresent in the original but missing in the transformed. '
+                'Filled with 0s: {}\n'
+                .format(in_original_not_in_new))
+            warnings.warn(
+                '\nPresent in the transformed but missing in the original. '
+                'Removed: {}\n'
+                .format(not_in_original_in_new))
+
+        result = pd.concat((
+            X[col_others],
+            transformed.reindex(columns=self.ohe_columns).fillna(0)
+        ), axis=1)
+        return result
 
 
 # ------------------------------------------------------------------------------
