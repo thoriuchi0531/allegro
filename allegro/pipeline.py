@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.base import (BaseEstimator, TransformerMixin, RegressorMixin,
                           clone)
 from sklearn.externals.joblib import Parallel, delayed
-from sklearn.feature_selection import VarianceThreshold
+from sklearn.feature_selection import VarianceThreshold, SelectFromModel
 from sklearn.pipeline import FeatureUnion
 from sklearn.preprocessing import Imputer
 import xgboost as xgb
@@ -32,6 +32,7 @@ class VarianceThresholdDF(VarianceThreshold):
 class FilterUnique(BaseEstimator, TransformerMixin):
     def __init__(self, axis=1):
         self.axis = axis
+        self.unique_indices = None
 
     def fit(self, X, *_):
         _, self.unique_indices = np.unique(X, axis=self.axis, return_index=True)
@@ -46,14 +47,14 @@ class FilterUnique(BaseEstimator, TransformerMixin):
             raise NotImplementedError()
 
 
-class FilterXGBImportance(BaseEstimator, TransformerMixin):
-    def __init__(self, n_features, **xgb_params):
-        self.n_features = n_features
-        self.model = None
+class FilterXGBImportance(SelectFromModel):
+    def __init__(self, threshold=None, prefit=False, norm_order=1,
+                 **xgb_params):
+        super(FilterXGBImportance, self).__init__(None, threshold,
+                                                  prefit, norm_order)
         self.xgb_params = xgb_params
-        self.xgb_f_score = None
 
-    def fit(self, X, y):
+    def fit(self, X, y=None, **fit_params):
         model_tmp = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
         model_tmp.set_params(**self.xgb_params)
 
@@ -71,17 +72,10 @@ class FilterXGBImportance(BaseEstimator, TransformerMixin):
         n_estimators = xgb_cv_result.shape[0]
         xgb_params['n_estimators'] = n_estimators
 
-        self.model = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
-        self.model.set_params(**xgb_params)
-        self.model.fit(X, y)
-
-        self.xgb_f_score = (pd.Series(self.model.feature_importances_,
-                                      index=X.columns)
-                            .sort_values(ascending=False))
+        self.estimator_ = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
+        self.estimator_.set_params(**xgb_params)
+        self.estimator_.fit(X, y)
         return self
-
-    def transform(self, X, *_):
-        return X.loc[:, self.xgb_f_score.head(self.n_features).index]
 
 
 # ------------------------------------------------------------------------------
@@ -261,13 +255,13 @@ class ModelEnsemble(BaseEstimator, RegressorMixin, TransformerMixin):
         self.models = models
 
     def fit(self, X, y):
-        self.models_ = [clone(x) for x in self.models]
+        self.models = [clone(x) for x in self.models]
         # Train cloned base models
-        for model in self.models_:
+        for model in self.models:
             model.fit(X, y)
         return self
 
     def predict(self, X):
         predictions = np.column_stack([model.predict(X)
-                                       for model in self.models_])
+                                       for model in self.models])
         return np.mean(predictions, axis=1)
