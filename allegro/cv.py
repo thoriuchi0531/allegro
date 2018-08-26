@@ -34,6 +34,7 @@ def run_xgb_cv(x_train, y_train, **kwargs):
             nfold=10,
             metrics='rmse',
             early_stopping_rounds=10,
+            seed=xgb_params.get('random_state', 0),
             verbose_eval=False
         )
 
