@@ -1,5 +1,6 @@
 from itertools import product
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import xgboost
@@ -7,6 +8,10 @@ from xgboost import XGBRegressor
 
 from tqdm import tqdm, tqdm_notebook
 tqdm.pandas(tqdm_notebook)
+
+from .logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def plot_cv_result(cv_result):
@@ -53,7 +58,7 @@ def run_xgb_cv(x_train, y_train, **kwargs):
     for param_values in tqdm_notebook(list(product(*param_list.values()))):
         # this will be executed even if kwargs is None
         param_set = {k: v for k, v in zip(param_list.keys(), param_values)}
-        print('param_list={}'.format(param_set))
+        logger.info('param_list={}'.format(param_set))
         xgb_cv_result_last = _run_xgb_cv(**param_set)
         cv_summary.append(xgb_cv_result_last)
 
@@ -74,8 +79,9 @@ def run_xgb_cv(x_train, y_train, **kwargs):
     # show result on the best CV result
     best_params = cv_summary[arg_min][0]
     best_cv_result = cv_summary[arg_min][6]
-    print('best_params={}'.format(best_params))
-    print(best_cv_result.iloc[best_params['n_estimators'] - 1, :])
+    logger.info('best_params={}'.format(best_params))
+    logger.info('\n{}'.format(best_cv_result
+                              .iloc[best_params['n_estimators'] - 1, :]))
     plot_cv_result(best_cv_result)
 
     # fit best params
