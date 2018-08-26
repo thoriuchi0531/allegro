@@ -9,7 +9,7 @@ from xgboost import XGBRegressor
 from tqdm import tqdm, tqdm_notebook
 tqdm.pandas(tqdm_notebook)
 
-from .logging import get_logger
+from .log import get_logger
 
 logger = get_logger(__name__)
 
