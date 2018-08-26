@@ -5,6 +5,7 @@ from sklearn.base import (BaseEstimator, TransformerMixin, RegressorMixin,
                           clone)
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.feature_selection import VarianceThreshold, SelectFromModel
+from sklearn.feature_selection.from_model import _get_feature_importances
 from sklearn.pipeline import FeatureUnion
 from sklearn.preprocessing import Imputer
 import xgboost as xgb
@@ -49,10 +50,46 @@ class FilterUnique(BaseEstimator, TransformerMixin):
 
 class FilterXGBImportance(SelectFromModel):
     def __init__(self, threshold=None, prefit=False, norm_order=1,
-                 **xgb_params):
+                 n_features=None, **xgb_params):
         super(FilterXGBImportance, self).__init__(None, threshold,
                                                   prefit, norm_order)
+        self.n_features = n_features
         self.xgb_params = xgb_params
+
+        # validate inputs
+        if self.threshold is not None and self.n_features is None:
+            pass
+        elif self.threshold is None and self.n_features is not None:
+            if not isinstance(self.n_features, (int, float)):
+                raise TypeError('n_features has to be a number. '
+                                'Got n_features={}'.format(self.n_features))
+        else:
+            raise ValueError('Got threshold={} and n_features={}. '
+                             'Either of them needs to be specified.'
+                             .format(self.threshold, self.n_features))
+
+    def _get_support_mask(self):
+        if self.threshold is not None:
+            return super(FilterXGBImportance, self)._get_support_mask()
+        elif self.threshold is None:
+            if self.prefit:
+                estimator = self.estimator
+            elif hasattr(self, 'estimator_'):
+                estimator = self.estimator_
+            else:
+                raise ValueError(
+                    'Either fit SelectFromModel before transform or set "prefit='   
+                    'True" and pass a fitted estimator to the constructor.'
+                )
+
+            score = _get_feature_importances(estimator, self.norm_order)
+            rank_index = np.argsort(score)
+            return rank_index < self.n_features
+
+        else:
+            raise ValueError('Got threshold={} and n_features={}. '
+                             'Either of them needs to be specified.'
+                             .format(self.threshold, self.n_features))
 
     def fit(self, X, y=None, **fit_params):
         model_tmp = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
@@ -76,6 +113,14 @@ class FilterXGBImportance(SelectFromModel):
         self.estimator_.set_params(**xgb_params)
         self.estimator_.fit(X, y)
         return self
+
+    def transform(self, X):
+        """ Return as a DataFrame """
+        mask = self.get_support()
+        filtered_columns = X.columns[mask]
+        filtered = super(FilterXGBImportance, self).transform(X)
+        return pd.DataFrame(filtered, index=X.index,
+                            columns=filtered_columns)
 
 
 # ------------------------------------------------------------------------------
