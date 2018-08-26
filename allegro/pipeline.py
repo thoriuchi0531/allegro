@@ -71,7 +71,7 @@ class FilterXGBImportance(SelectFromModel):
     def _get_support_mask(self):
         if self.threshold is not None:
             return super(FilterXGBImportance, self)._get_support_mask()
-        elif self.threshold is None:
+        elif self.n_features is not None:
             if self.prefit:
                 estimator = self.estimator
             elif hasattr(self, 'estimator_'):
@@ -84,7 +84,7 @@ class FilterXGBImportance(SelectFromModel):
 
             score = _get_feature_importances(estimator, self.norm_order)
             rank_index = np.argsort(score)
-            return rank_index < self.n_features
+            return rank_index >= (len(rank_index) - self.n_features)
 
         else:
             raise ValueError('Got threshold={} and n_features={}. '
