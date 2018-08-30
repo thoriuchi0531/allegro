@@ -192,6 +192,43 @@ class ConvertNaNs(Imputer):
         return result
 
 
+class FillNa(BaseEstimator, TransformerMixin):
+    def __init__(self, strategy, target_columns):
+        self.strategy = strategy
+        self.target_columns = target_columns
+
+        if not isinstance(self.strategy, list):
+            self.strategy = [self.strategy]
+        if not isinstance(self.target_columns, list):
+            self.target_columns = [self.target_columns]
+
+        if len(self.strategy) != len(self.target_columns):
+            raise ValueError('Length mismatch. strategy length = {} while'
+                             'target column length = {}'
+                             .format(len(self.strategy),
+                                     len(self.target_columns)))
+
+    def fit(self, X, *_):
+        return self
+
+    def transform(self, X, *_):
+        X = X.copy(True)
+        for strat, col in zip(self.strategy, self.target_columns):
+            X[col] = X[col].fillna(strat)
+        return X
+
+
+class GroupFillNa(FillNa):
+    def __init__(self, strategy, target_columns):
+        super(GroupFillNa, self).__init__(strategy, target_columns)
+
+    def transform(self, X, *_):
+        X = X.copy(True)
+        index_flg = X[self.target_columns].isna().all(axis=1)
+        X.loc[index_flg, self.target_columns] = self.strategy
+        return X
+
+
 class ConvertOneHotEncoding(BaseEstimator, TransformerMixin):
     def __init__(self):
         self.category_columns = None

@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from sklearn.datasets import load_iris
-from ..pipeline import FilterXGBImportance
+from ..pipeline import (FilterXGBImportance, ConvertNaNs, FillNa, GroupFillNa)
 
 
 class TestPipeline(unittest.TestCase):
@@ -32,3 +32,35 @@ class TestPipeline(unittest.TestCase):
         importance_rank = np.argsort(importance)
         flg = importance_rank >= len(self.x_data.columns) - pipeline.n_features
         self.assertTrue(set(self.x_data.columns[flg]), set(filtered.columns))
+
+    def test_convert_nan(self):
+        X = pd.DataFrame([[np.nan, 2], [6, np.nan], [7, 6]],
+                         columns=['a', 'b'])
+        result = ConvertNaNs(target_columns=float).fit_transform(X)
+        self.assertEqual(result.loc[0, 'a'], 6.5)
+        self.assertEqual(result.loc[1, 'b'], 4)
+
+    def test_fill_na(self):
+        X = pd.DataFrame([[np.nan, 2], [6, np.nan], [7, 6]],
+                         columns=['a', 'b'])
+        result = FillNa(strategy=1, target_columns='a').fit_transform(X)
+        self.assertEqual(result.loc[0, 'a'], 1)
+        self.assertTrue(np.isnan(result.loc[1, 'b']))
+
+        result = (FillNa(strategy=[10, 20], target_columns=['a', 'b'])
+                  .fit_transform(X))
+        self.assertEqual(result.loc[0, 'a'], 10)
+        self.assertEqual(result.loc[1, 'b'], 20)
+
+    def test_group_fill_na(self):
+        X = pd.DataFrame([[np.nan, 2],
+                          [6, np.nan],
+                          [7, 6],
+                          [np.nan, np.nan]],
+                         columns=['a', 'b'])
+        result = (GroupFillNa(strategy=[1, 2], target_columns=['a', 'b'])
+                  .fit_transform(X))
+        self.assertTrue(np.isnan(result.loc[0, 'a']))
+        self.assertTrue(np.isnan(result.loc[1, 'b']))
+        self.assertEqual(result.loc[3, 'a'], 1)
+        self.assertEqual(result.loc[3, 'b'], 2)
