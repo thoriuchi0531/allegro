@@ -239,7 +239,7 @@ class ConditionalFillNa(BaseEstimator, TransformerMixin):
     def fit(self, X, *_):
         fill_map = X.groupby(self.cond_column)[self.target_column]
         if self.how == 'median':
-            fill_map = fill_map.media()
+            fill_map = fill_map.median()
         elif self.how == 'mean':
             fill_map = fill_map.mean()
         else:
