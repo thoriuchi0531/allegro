@@ -229,6 +229,32 @@ class GroupFillNa(FillNa):
         return X
 
 
+class ConditionalFillNa(BaseEstimator, TransformerMixin):
+    def __init__(self, target_column, cond_column, how='median'):
+        self.target_column = target_column
+        self.cond_column = cond_column
+        self.how = how
+        self.fill_map = None
+
+    def fit(self, X, *_):
+        fill_map = X.groupby(self.cond_column)[self.target_column]
+        if self.how == 'median':
+            fill_map = fill_map.media()
+        elif self.how == 'mean':
+            fill_map = fill_map.mean()
+        else:
+            raise NotImplementedError()
+        self.fill_map = fill_map
+        return self
+
+    def transform(self, X, *_):
+        X = X.copy(True)
+        result = (X.groupby(self.cond_column)[self.target_column]
+                  .transform(lambda x: x.fillna(self.fill_map[x.name])))
+        X[self.target_column] = result
+        return X
+
+
 class ConvertOneHotEncoding(BaseEstimator, TransformerMixin):
     def __init__(self):
         self.category_columns = None

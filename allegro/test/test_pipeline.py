@@ -2,7 +2,8 @@ import unittest
 import numpy as np
 import pandas as pd
 from sklearn.datasets import load_iris
-from ..pipeline import (FilterXGBImportance, ConvertNaNs, FillNa, GroupFillNa)
+from ..pipeline import (FilterXGBImportance, ConvertNaNs, FillNa, GroupFillNa,
+                        ConditionalFillNa)
 
 
 class TestPipeline(unittest.TestCase):
@@ -64,3 +65,24 @@ class TestPipeline(unittest.TestCase):
         self.assertTrue(np.isnan(result.loc[1, 'b']))
         self.assertEqual(result.loc[3, 'a'], 1)
         self.assertEqual(result.loc[3, 'b'], 2)
+
+    def test_conditional_fill_na(self):
+        X = pd.DataFrame([['foo', 2],
+                          ['bar', 1],
+                          ['foo', 6],
+                          ['bar', 10],
+                          ['foo', np.nan],
+                          ['bar', np.nan]],
+                         columns=['a', 'b'])
+        fit = (ConditionalFillNa(target_column='b', cond_column='a',
+                                 how='mean').fit(X))
+        result = fit.transform(X)
+        self.assertTrue(result.loc[4, 'b'], 4)
+        self.assertTrue(result.loc[5, 'b'], 5.5)
+
+        X = pd.DataFrame([['foo', np.nan],
+                          ['bar', np.nan]],
+                         columns=['a', 'b'])
+        result = fit.transform(X)
+        self.assertTrue(result.loc[0, 'b'], 4)
+        self.assertTrue(result.loc[1, 'b'], 5.5)
