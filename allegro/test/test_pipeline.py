@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets import load_iris
 from ..pipeline import (FilterXGBImportance, ConvertNaNs, FillNa, GroupFillNa,
-                        ConditionalFillNa)
+                        ConditionalFillNa, ConvertStrToInt)
 
 
 class TestPipeline(unittest.TestCase):
@@ -86,3 +86,22 @@ class TestPipeline(unittest.TestCase):
         result = fit.transform(X)
         self.assertTrue(result.loc[0, 'b'], 4)
         self.assertTrue(result.loc[1, 'b'], 5.5)
+
+    def test_convert_str_to_int(self):
+        X = pd.DataFrame([['foo', 2],
+                          ['bar', 1],
+                          ['foo', 6],
+                          ['bar', 10],
+                          ['foo', np.nan],
+                          ['bar', np.nan]],
+                         columns=['a', 'b'])
+        result = (ConvertStrToInt(target_column='a', str_list=['foo', 'bar'])
+                  .fit_transform(X))
+        self.assertEqual(result.loc[0, 'a'], 0)
+        self.assertEqual(result.loc[1, 'a'], 1)
+
+        result = (ConvertStrToInt(target_column='a', str_list=['bar', 'foo'])
+                  .fit_transform(X))
+        self.assertEqual(result.loc[0, 'a'], 1)
+        self.assertEqual(result.loc[1, 'a'], 0)
+

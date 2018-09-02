@@ -156,6 +156,21 @@ class ConvertToCategory(BaseEstimator, TransformerMixin):
         return X
 
 
+class ConvertStrToInt(BaseEstimator, TransformerMixin):
+    def __init__(self, target_column, str_list):
+        self.target_column = target_column
+        self.str_map = {i: j for i, j in zip(str_list, range(len(str_list)))}
+
+    def fit(self, *_):
+        return self
+
+    def transform(self, X, *_):
+        X = X.copy(True)
+        X[self.target_column] = (X[self.target_column]
+                                 .apply(lambda x: self.str_map[x]))
+        return X
+
+
 class ConvertNaNs(Imputer):
     def __init__(self, missing_values="NaN", strategy="mean",
                  axis=0, verbose=0, copy=True, target_columns=float):
