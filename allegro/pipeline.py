@@ -84,8 +84,10 @@ class FilterXGBImportance(SelectFromModel):
                 )
 
             score = _get_feature_importances(estimator, self.norm_order)
-            rank_index = np.argsort(score)
-            return rank_index >= (len(rank_index) - self.n_features)
+            n_largest = np.argsort(score)[-self.n_features:]
+            mask = np.zeros(len(score), dtype=bool)
+            mask[n_largest] = True
+            return mask
 
         else:
             raise ValueError('Got threshold={} and n_features={}. '
