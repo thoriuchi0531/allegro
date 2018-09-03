@@ -21,6 +21,7 @@ setup(name='allegro',
           'scipy',
           'scikit-learn',
           'xgboost',
+          'lightgbm',
           'matplotlib',
           'tqdm'
       ],
