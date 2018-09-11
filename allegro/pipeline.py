@@ -107,7 +107,7 @@ class FilterXGBImportance(SelectFromModel):
             nfold=10,
             metrics='rmse',
             early_stopping_rounds=10,
-            seed=xgb_params.get('random_state', 0),
+            seed=xgb_params.get('seed', 0),
             verbose_eval=False
         )
         n_estimators = xgb_cv_result.shape[0]

@@ -27,7 +27,9 @@ def _lgb_plot_cv_result(cv_result):
 
 
 def _xgb_cv(x_train, y_train, **param_set):
-    xgb_model = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
+    random_state = param_set.get('random_state', 0)
+    xgb_model = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1,
+                                 random_state=random_state)
     xgb_model.set_params(**param_set)
     xgb_params = xgb_model.get_xgb_params()
     xgb_dmatrix = xgb.DMatrix(x_train, y_train)
@@ -39,12 +41,13 @@ def _xgb_cv(x_train, y_train, **param_set):
         nfold=10,
         metrics='rmse',
         early_stopping_rounds=10,
-        seed=xgb_params.get('random_state', 0),
+        seed=random_state,
         verbose_eval=False
     )
 
     n_estimators = xgb_cv_result.shape[0]
     xgb_params['n_estimators'] = n_estimators
+    xgb_model.set_params(n_estimators=n_estimators)
     return [xgb_params,
             n_estimators,
             xgb_cv_result.loc[n_estimators - 1, 'train-rmse-mean'],
@@ -56,19 +59,24 @@ def _xgb_cv(x_train, y_train, **param_set):
 
 
 def _lgb_cv(x_train, y_train, **param_set):
-    lgb_model = lgb.LGBMRegressor(n_estimators=5000, n_jobs=-1)
+    random_state = param_set.get('random_state', 0)
+    lgb_model = lgb.LGBMRegressor(n_estimators=5000, n_jobs=-1,
+                                  random_state=random_state)
     lgb_model.set_params(**param_set)
     lgb_params = lgb_model.get_params()
-    lgb_dataset = lgb.Dataset(x_train, y_train)
+    # Use .pop() to prevent warning
+    n_estimators = lgb_params.pop('n_estimators')
+    lgb_params.pop('silent')
+    lgb_dataset = lgb.Dataset(x_train, label=y_train)
 
     lgb_cv_result = lgb.cv(
         lgb_params,
         lgb_dataset,
-        num_boost_round=lgb_params.get('n_estimators'),
+        num_boost_round=n_estimators,
         nfold=10,
         metrics='rmse',
         early_stopping_rounds=10,
-        seed=lgb_params.get('random_state', 0),
+        seed=random_state,
         verbose_eval=False,
         stratified=False
     )
@@ -76,18 +84,20 @@ def _lgb_cv(x_train, y_train, **param_set):
     lgb_cv_result = pd.DataFrame(lgb_cv_result)
     n_estimators = lgb_cv_result.shape[0]
     lgb_params['n_estimators'] = n_estimators
+    lgb_model.set_params(n_estimators=n_estimators)
     return [lgb_params,
             n_estimators,
-            lgb_cv_result.loc[n_estimators - 1, 'rmse-mean'],
-            lgb_cv_result.loc[n_estimators - 1, 'rmse-stdv'],
             None,
             None,
+            lgb_cv_result.loc[n_estimators- 1, 'rmse-mean'],
+            lgb_cv_result.loc[n_estimators- 1, 'rmse-stdv'],
             lgb_cv_result,
             lgb_model]
 
 
-def _run_cv(x_train, y_train, func_get_n_estimators, func_plot_cv_result,
-            **kwargs):
+def _run_cv(x_train, y_train,
+            func_get_n_estimators, func_plot_cv_result,
+            plot_result=True, **kwargs):
 
     param_list = dict()
     for kw_k, kw_v in kwargs.items():
@@ -109,7 +119,7 @@ def _run_cv(x_train, y_train, func_get_n_estimators, func_plot_cv_result,
     arg_min = np.argmin(test_rmse_mean)
 
     # show parameter sensitivity
-    if len(test_rmse_mean) > 1:
+    if len(test_rmse_mean) > 1 and plot_result:
         all_params = [i[0] for i in cv_summary]
         concat_params = pd.concat([pd.Series(i) for i in all_params], axis=1)
         concat_params = concat_params[concat_params.nunique(axis=1) > 1]
@@ -124,7 +134,8 @@ def _run_cv(x_train, y_train, func_get_n_estimators, func_plot_cv_result,
     logger.info('best_params={}'.format(best_params))
     logger.info('\n{}'.format(best_cv_result
                               .iloc[best_params['n_estimators'] - 1, :]))
-    func_plot_cv_result(best_cv_result)
+    if plot_result:
+        func_plot_cv_result(best_cv_result)
 
     # fit best params
     estimator = cv_summary[arg_min][7]
@@ -132,9 +143,13 @@ def _run_cv(x_train, y_train, func_get_n_estimators, func_plot_cv_result,
     return estimator
 
 
-def run_xgb_cv(x_train, y_train, **kwargs):
-    return _run_cv(x_train, y_train, _xgb_cv, _xgb_plot_cv_result, **kwargs)
+def run_xgb_cv(x_train, y_train, plot_result=True, **kwargs):
+    return _run_cv(x_train, y_train,
+                   _xgb_cv, _xgb_plot_cv_result,
+                   plot_result, **kwargs)
 
 
-def run_lgb_cv(x_train, y_train, **kwargs):
-    return _run_cv(x_train, y_train, _lgb_cv, _lgb_plot_cv_result, **kwargs)
+def run_lgb_cv(x_train, y_train, plot_result=True, **kwargs):
+    return _run_cv(x_train, y_train,
+                   _lgb_cv, _lgb_plot_cv_result,
+                   plot_result, **kwargs)
