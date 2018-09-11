@@ -9,7 +9,8 @@ from sklearn.feature_selection.from_model import _get_feature_importances
 from sklearn.model_selection import KFold
 from sklearn.pipeline import FeatureUnion
 from sklearn.preprocessing import Imputer
-import xgboost as xgb
+
+from .cv import run_xgb_cv, run_lgb_cv
 
 
 # ------------------------------------------------------------------------------
@@ -49,13 +50,13 @@ class FilterUnique(BaseEstimator, TransformerMixin):
             raise NotImplementedError()
 
 
-class FilterXGBImportance(SelectFromModel):
+class _FilterImportance(SelectFromModel):
     def __init__(self, threshold=None, prefit=False, norm_order=1,
-                 n_features=None, **xgb_params):
-        super(FilterXGBImportance, self).__init__(None, threshold,
-                                                  prefit, norm_order)
+                 n_features=None, **params):
+        super(_FilterImportance, self).__init__(None, threshold,
+                                                prefit, norm_order)
         self.n_features = n_features
-        self.xgb_params = xgb_params
+        self.params = params
 
         # validate inputs
         if self.threshold is not None and self.n_features is None:
@@ -71,7 +72,7 @@ class FilterXGBImportance(SelectFromModel):
 
     def _get_support_mask(self):
         if self.threshold is not None:
-            return super(FilterXGBImportance, self)._get_support_mask()
+            return super(_FilterImportance, self)._get_support_mask()
         elif self.n_features is not None:
             if self.prefit:
                 estimator = self.estimator
@@ -79,7 +80,7 @@ class FilterXGBImportance(SelectFromModel):
                 estimator = self.estimator_
             else:
                 raise ValueError(
-                    'Either fit SelectFromModel before transform or set "prefit='   
+                    'Either fit SelectFromModel before transform or set "prefit='
                     'True" and pass a fitted estimator to the constructor.'
                 )
 
@@ -94,37 +95,25 @@ class FilterXGBImportance(SelectFromModel):
                              'Either of them needs to be specified.'
                              .format(self.threshold, self.n_features))
 
-    def fit(self, X, y=None, **fit_params):
-        model_tmp = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
-        model_tmp.set_params(**self.xgb_params)
-
-        xgb_dmatrix = xgb.DMatrix(X, y)
-        xgb_params = model_tmp.get_xgb_params()
-        xgb_cv_result = xgb.cv(
-            xgb_params,
-            xgb_dmatrix,
-            num_boost_round=xgb_params.get('n_estimators'),
-            nfold=10,
-            metrics='rmse',
-            early_stopping_rounds=10,
-            seed=xgb_params.get('seed', 0),
-            verbose_eval=False
-        )
-        n_estimators = xgb_cv_result.shape[0]
-        xgb_params['n_estimators'] = n_estimators
-
-        self.estimator_ = xgb.XGBRegressor(n_estimators=5000, n_jobs=-1)
-        self.estimator_.set_params(**xgb_params)
-        self.estimator_.fit(X, y)
-        return self
-
     def transform(self, X):
         """ Return as a DataFrame """
         mask = self.get_support()
         filtered_columns = X.columns[mask]
-        filtered = super(FilterXGBImportance, self).transform(X)
+        filtered = super(_FilterImportance, self).transform(X)
         return pd.DataFrame(filtered, index=X.index,
                             columns=filtered_columns)
+
+
+class FilterXGBImportance(_FilterImportance):
+    def fit(self, X, y=None, **fit_params):
+        self.estimator_ = run_xgb_cv(X, y, plot_result=False)
+        return self
+
+
+class FilterLGBImportance(_FilterImportance):
+    def fit(self, X, y=None, **fit_params):
+        self.estimator_ = run_lgb_cv(X, y, plot_result=False)
+        return self
 
 
 # ------------------------------------------------------------------------------
