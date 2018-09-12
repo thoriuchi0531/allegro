@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import xgboost as xgb
 import lightgbm as lgb
+import catboost as cb
 
 from tqdm import tqdm, tqdm_notebook
 tqdm.pandas(tqdm_notebook)
@@ -24,6 +25,12 @@ def _lgb_plot_cv_result(cv_result):
     fig, ax = plt.subplots(1, 2, figsize=(14, 4))
     cv_result['rmse-mean'].plot(logy=True, ax=ax[0])
     cv_result['rmse-stdv'].plot(logy=False, ax=ax[1])
+
+
+def _cb_plot_cv_result(cv_result):
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4))
+    cv_result[['train-RMSE-mean', 'test-RMSE-mean']].plot(logy=True, ax=ax[0])
+    cv_result[['train-RMSE-std', 'test-RMSE-std']].plot(logy=False, ax=ax[1])
 
 
 def _xgb_cv(x_train, y_train, **param_set):
@@ -102,6 +109,37 @@ def _lgb_cv(x_train, y_train, **param_set):
             lgb_model]
 
 
+def _cb_cv(x_train, y_train, **param_set):
+    random_state = param_set.get('random_state', 0)
+    cb_model = cb.CatBoostRegressor(n_estimators=5000, loss_function='RMSE')
+    cb_model.set_params(**param_set)
+    cb_params = cb_model.get_params()
+    n_estimators = cb_params.pop('iterations')
+    cb_pool = cb.Pool(x_train, label=y_train)
+
+    cb_cv_result = cb.cv(
+        cb_pool,
+        cb_params,
+        num_boost_round=n_estimators,
+        nfold=10,
+        early_stopping_rounds=10,
+        seed=random_state,
+        verbose_eval=False,
+        stratified=False,
+    )
+    n_estimators = cb_cv_result.shape[0] - 10
+    cb_params['n_estimators'] = n_estimators
+    cb_model.set_params(iterations=n_estimators)
+    return [cb_params,
+            n_estimators,
+            cb_cv_result.loc[n_estimators - 1, 'train-RMSE-mean'],
+            cb_cv_result.loc[n_estimators - 1, 'train-RMSE-std'],
+            cb_cv_result.loc[n_estimators - 1, 'test-RMSE-mean'],
+            cb_cv_result.loc[n_estimators - 1, 'test-RMSE-std'],
+            cb_cv_result,
+            cb_model]
+
+
 def _run_cv(x_train, y_train,
             func_get_n_estimators, func_plot_cv_result,
             plot_result=True, **kwargs):
@@ -159,4 +197,10 @@ def run_xgb_cv(x_train, y_train, plot_result=True, **kwargs):
 def run_lgb_cv(x_train, y_train, plot_result=True, **kwargs):
     return _run_cv(x_train, y_train,
                    _lgb_cv, _lgb_plot_cv_result,
+                   plot_result, **kwargs)
+
+
+def run_cb_cv(x_train, y_train, plot_result=True, **kwargs):
+    return _run_cv(x_train, y_train,
+                   _cb_cv, _cb_plot_cv_result,
                    plot_result, **kwargs)
