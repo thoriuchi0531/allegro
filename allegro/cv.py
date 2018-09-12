@@ -60,8 +60,13 @@ def _xgb_cv(x_train, y_train, **param_set):
 
 def _lgb_cv(x_train, y_train, **param_set):
     random_state = param_set.get('random_state', 0)
+    feature_fraction_seed = param_set.get('feature_fraction_seed',
+                                          random_state)
+    bagging_seed = param_set.get('bagging_seed', random_state)
     lgb_model = lgb.LGBMRegressor(n_estimators=5000, n_jobs=-1,
-                                  random_state=random_state)
+                                  random_state=random_state,
+                                  feature_fraction_seed=feature_fraction_seed,
+                                  bagging_seed=bagging_seed)
     lgb_model.set_params(**param_set)
     lgb_params = lgb_model.get_params()
     # Use .pop() to prevent warning
@@ -84,6 +89,8 @@ def _lgb_cv(x_train, y_train, **param_set):
     lgb_cv_result = pd.DataFrame(lgb_cv_result)
     n_estimators = lgb_cv_result.shape[0]
     lgb_params['n_estimators'] = n_estimators
+    lgb_params['feature_fraction_seed'] = random_state
+    lgb_params['bagging_seed'] = random_state
     lgb_model.set_params(n_estimators=n_estimators)
     return [lgb_params,
             n_estimators,
