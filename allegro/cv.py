@@ -204,3 +204,189 @@ def run_cb_cv(x_train, y_train, plot_result=True, **kwargs):
     return _run_cv(x_train, y_train,
                    _cb_cv, _cb_plot_cv_result,
                    plot_result, **kwargs)
+
+
+def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
+    def _log_header(text):
+        logger.info('\n------------------------------------------------------\n'
+                    '\t {}\n'
+                    '------------------------------------------------------'
+                    .format(text))
+
+    def _cv_xgb(X, y, max_depth_list, min_child_weight_list):
+        xgb_params.update({
+            'max_depth': max_depth_list,
+            'min_child_weight': min_child_weight_list,
+        })
+        model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+        max_depth = model.get_xgb_params()['max_depth']
+        min_child_weight = model.get_xgb_params()['min_child_weight']
+        return max_depth, min_child_weight
+
+    _log_header('max_depth and min_child_weight')
+    max_depth_list = list(range(1, 10, 2))
+    min_child_weight_list = list(range(1, 10, 2))
+    max_depth_list2 = list(range(9, 20, 2))
+    min_child_weight_list2 = list(range(9, 20, 2))
+
+    max_depth, min_child_weight = _cv_xgb(X, y, max_depth_list,
+                                          min_child_weight_list)
+
+    if (max_depth < max(max_depth_list) and
+            min_child_weight < max(min_child_weight_list)):
+        logger.info('Trying finer grids')
+        max_depth, min_child_weight = _cv_xgb(
+            X, y,
+            [max_depth - 1, max_depth, max_depth + 1],
+            [min_child_weight - 1, min_child_weight, min_child_weight + 1]
+        )
+
+    elif (max_depth >= max(max_depth_list) and
+          min_child_weight < max(min_child_weight_list)):
+        logger.info('Optimal max_depth may be outside of the initial range.')
+        max_depth, min_child_weight = _cv_xgb(
+            X, y,
+            max_depth_list2,
+            [min_child_weight - 1, min_child_weight, min_child_weight + 1]
+        )
+
+        logger.info('Trying finer grids for max_depth')
+        max_depth, min_child_weight = _cv_xgb(
+            X, y,
+            [max_depth - 1, max_depth, max_depth + 1],
+            min_child_weight
+        )
+
+    elif (max_depth < max(max_depth_list) and
+          min_child_weight >= max(min_child_weight_list)):
+        logger.info(
+            'Optimal min_child_weight may be outside of the initial range.')
+        max_depth, min_child_weight = _cv_xgb(
+            X, y,
+            [max_depth - 1, max_depth, max_depth + 1],
+            min_child_weight_list2
+        )
+
+        logger.info('Trying finer grids for min_child_weight')
+        max_depth, min_child_weight = _cv_xgb(
+            X, y,
+            max_depth,
+            [min_child_weight - 1, min_child_weight, min_child_weight + 1]
+        )
+
+    else:
+        logger.info('Optimal max_depth may be outside of the initial range.')
+        logger.info(
+            'Optimal min_child_weight may be outside of the initial range.')
+        max_depth, min_child_weight = _cv_xgb(X, y, max_depth_list2,
+                                              min_child_weight_list2)
+
+        if (max_depth > max(max_depth_list2) or
+                min_child_weight > max(min_child_weight_list2)):
+            raise ValueError('Too large max_depth or min_child_weight. '
+                             'max_depth={}, min_child_weight={}'
+                             .format(max_depth, min_child_weight))
+
+        logger.info('Trying finer grids')
+        max_depth, min_child_weight = _cv_xgb(
+            X, y,
+            [max_depth - 1, max_depth, max_depth + 1],
+            [min_child_weight - 1, min_child_weight, min_child_weight + 1]
+        )
+
+    # --------------------------------------------------------------------------
+    # gamma
+    # --------------------------------------------------------------------------
+    _log_header('gamma')
+    xgb_params.update({
+        'max_depth': max_depth,
+        'min_child_weight': min_child_weight,
+        'gamma': [i / 10 for i in range(0, 10)],
+    })
+    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+    gamma = model.get_xgb_params()['gamma']
+
+    # --------------------------------------------------------------------------
+    # subsample and colsample_bytree
+    # --------------------------------------------------------------------------
+    _log_header('subsample and colsample_bytree')
+    subsample_list = [i / 10 for i in range(1, 11, 2)]
+    colsample_bytree_list = [i / 10 for i in range(1, 11, 2)]
+    xgb_params.update({
+        'max_depth': max_depth,
+        'min_child_weight': min_child_weight,
+        'gamma': gamma,
+        'subsample': subsample_list,
+        'colsample_bytree': colsample_bytree_list
+    })
+    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+    subsample = model.get_xgb_params()['subsample']
+    colsample_bytree = model.get_xgb_params()['colsample_bytree']
+
+    logger.info('Trying finer grids')
+    subsample_list = [subsample - 0.1, subsample, subsample + 0.1]
+    colsample_bytree_list = [colsample_bytree - 0.1, colsample_bytree,
+                             colsample_bytree + 0.1]
+    if subsample == 0.1:
+        subsample_list = [0.1]
+    if colsample_bytree == 0.1:
+        colsample_bytree_list = [0.1]
+    xgb_params.update({
+        'max_depth': max_depth,
+        'min_child_weight': min_child_weight,
+        'gamma': gamma,
+        'subsample': subsample_list,
+        'colsample_bytree': colsample_bytree_list
+    })
+    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+    subsample = model.get_xgb_params()['subsample']
+    colsample_bytree = model.get_xgb_params()['colsample_bytree']
+
+    # --------------------------------------------------------------------------
+    # reg_alpha
+    # --------------------------------------------------------------------------
+    _log_header('reg_alpha')
+    xgb_params.update({
+        'max_depth': max_depth,
+        'min_child_weight': min_child_weight,
+        'gamma': gamma,
+        'subsample': subsample,
+        'colsample_bytree': colsample_bytree,
+        'reg_alpha': [0, 1e-5, 1e-2, 0.1, 1, 100],
+    })
+    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+    reg_alpha = model.get_xgb_params()['reg_alpha']
+
+    # --------------------------------------------------------------------------
+    # reg_lambda
+    # --------------------------------------------------------------------------
+    _log_header('reg_lambda')
+    xgb_params.update({
+        'max_depth': max_depth,
+        'min_child_weight': min_child_weight,
+        'gamma': gamma,
+        'subsample': subsample,
+        'colsample_bytree': colsample_bytree,
+        'reg_alpha': reg_alpha,
+        'reg_lambda': [0, 1e-5, 1e-2, 0.1, 1, 100],
+    })
+    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+    reg_lambda = model.get_xgb_params()['reg_lambda']
+
+    # --------------------------------------------------------------------------
+    # learning_rate
+    # --------------------------------------------------------------------------
+    _log_header('learning_rate')
+    xgb_params.update({
+        'max_depth': max_depth,
+        'min_child_weight': min_child_weight,
+        'gamma': gamma,
+        'subsample': subsample,
+        'colsample_bytree': colsample_bytree,
+        'reg_alpha': reg_alpha,
+        'reg_lambda': reg_lambda,
+        'learning_rate': [.3, .2, .1, .05, .01, .005]
+    })
+    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+
+    return model
