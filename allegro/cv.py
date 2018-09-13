@@ -310,8 +310,8 @@ def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
     # subsample and colsample_bytree
     # --------------------------------------------------------------------------
     _log_header('subsample and colsample_bytree')
-    subsample_list = [i / 10 for i in range(1, 11, 2)]
-    colsample_bytree_list = [i / 10 for i in range(1, 11, 2)]
+    subsample_list = [i / 10 for i in range(1, 11, 2)] + [1.0]
+    colsample_bytree_list = [i / 10 for i in range(1, 11, 2)] + [1.0]
     xgb_params.update({
         'max_depth': max_depth,
         'min_child_weight': min_child_weight,
@@ -323,24 +323,33 @@ def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
     subsample = model.get_xgb_params()['subsample']
     colsample_bytree = model.get_xgb_params()['colsample_bytree']
 
-    logger.info('Trying finer grids')
-    subsample_list = [subsample - 0.1, subsample, subsample + 0.1]
-    colsample_bytree_list = [colsample_bytree - 0.1, colsample_bytree,
-                             colsample_bytree + 0.1]
-    if subsample == 0.1:
-        subsample_list = [0.1]
-    if colsample_bytree == 0.1:
-        colsample_bytree_list = [0.1]
-    xgb_params.update({
-        'max_depth': max_depth,
-        'min_child_weight': min_child_weight,
-        'gamma': gamma,
-        'subsample': subsample_list,
-        'colsample_bytree': colsample_bytree_list
-    })
-    model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
-    subsample = model.get_xgb_params()['subsample']
-    colsample_bytree = model.get_xgb_params()['colsample_bytree']
+    if ((subsample == 0.1 and colsample_bytree == 0.1) or
+        (subsample == 1.0 and colsample_bytree == 1.0)):
+        # already optimal
+        pass
+    else:
+        logger.info('Trying finer grids')
+        subsample_list = [subsample - 0.1, subsample, subsample + 0.1]
+        colsample_bytree_list = [colsample_bytree - 0.1, colsample_bytree,
+                                 colsample_bytree + 0.1]
+        if subsample == 0.1:
+            subsample_list = [0.1]
+        elif subsample == 1.0:
+            subsample_list = [1.0]
+        if colsample_bytree == 0.1:
+            colsample_bytree_list = [0.1]
+        elif colsample_bytree == 1.0:
+            colsample_bytree_list = [1.0]
+        xgb_params.update({
+            'max_depth': max_depth,
+            'min_child_weight': min_child_weight,
+            'gamma': gamma,
+            'subsample': subsample_list,
+            'colsample_bytree': colsample_bytree_list
+        })
+        model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+        subsample = model.get_xgb_params()['subsample']
+        colsample_bytree = model.get_xgb_params()['colsample_bytree']
 
     # --------------------------------------------------------------------------
     # reg_alpha
