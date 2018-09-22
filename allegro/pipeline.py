@@ -98,10 +98,8 @@ class _FilterImportance(SelectFromModel):
     def transform(self, X):
         """ Return as a DataFrame """
         mask = self.get_support()
-        filtered_columns = X.columns[mask]
-        filtered = super(_FilterImportance, self).transform(X)
-        return pd.DataFrame(filtered, index=X.index,
-                            columns=filtered_columns)
+        # .transform() is not used to support non-numeric types
+        return X.loc[:, mask]
 
 
 class FilterXGBImportance(_FilterImportance):
@@ -272,7 +270,8 @@ class ConvertOneHotEncoding(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, *_):
-        col_others = list(set(X.columns) - set(self.category_columns))
+        # use sorted() to ensure reproducibility
+        col_others = sorted(list(set(X.columns) - set(self.category_columns)))
         transformed = pd.get_dummies(X[self.category_columns])
 
         if set(transformed.columns) != set(self.ohe_columns):
@@ -392,6 +391,15 @@ class ModelStacking(BaseEstimator, RegressorMixin, TransformerMixin):
         self.random_state = random_state
 
     def fit(self, X, y):
+        if isinstance(y, pd.Series):
+            pass
+        elif isinstance(y, pd.DataFrame):
+            y = y.squeeze()
+        elif isinstance(y, np.ndarray):
+            y = pd.Series(y)
+        else:
+            raise TypeError('Unrecognised y. type={}'.format(type(y)))
+
         self.base_models_ = []
         self.meta_model_ = clone(self.meta_model)
         kfold = KFold(n_splits=self.n_folds, shuffle=True,
@@ -404,8 +412,8 @@ class ModelStacking(BaseEstimator, RegressorMixin, TransformerMixin):
             fold_models = []
             for train_index, holdout_index in kfold.split(X, y):
                 instance = clone(model)
-                instance.fit(X[train_index], y[train_index])
-                y_pred = instance.predict(X[holdout_index])
+                instance.fit(X.iloc[train_index, :], y.iloc[train_index])
+                y_pred = instance.predict(X.iloc[holdout_index, :])
                 out_of_fold_predictions[holdout_index, i] = y_pred
                 fold_models.append(instance)
             self.base_models_.append(fold_models)
