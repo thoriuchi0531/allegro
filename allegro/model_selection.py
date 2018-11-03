@@ -7,7 +7,7 @@ logger = get_logger()
 
 
 def multi_kfold_cross_val_score(estimator, X, y, scoring,
-                                n_splits=3, shuffle=False, n_cv=1):
+                                n_splits=10, shuffle=False, n_cv=5):
     result = []
     for i in range(n_cv):
         result.append(

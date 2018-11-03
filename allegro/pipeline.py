@@ -1,6 +1,7 @@
 import warnings
 import numpy as np
 import pandas as pd
+from scipy import stats
 from sklearn.base import (BaseEstimator, TransformerMixin, RegressorMixin,
                           clone)
 from sklearn.externals.joblib import Parallel, delayed
@@ -366,7 +367,7 @@ class FeatureAggregated(BaseEstimator, TransformerMixin):
 # model
 # ------------------------------------------------------------------------------
 # cf) https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
-class ModelEnsemble(BaseEstimator, RegressorMixin, TransformerMixin):
+class BaseEnsemble(BaseEstimator, RegressorMixin, TransformerMixin):
     def __init__(self, models):
         self.models = models
 
@@ -377,10 +378,25 @@ class ModelEnsemble(BaseEstimator, RegressorMixin, TransformerMixin):
             model.fit(X, y)
         return self
 
+
+class RegressorEnsemble(BaseEnsemble):
     def predict(self, X):
         predictions = np.column_stack([model.predict(X)
                                        for model in self.models])
         return np.mean(predictions, axis=1)
+
+
+class ClassifierEnsemble(BaseEnsemble):
+    def predict(self, X):
+        predictions = np.column_stack([model.predict(X)
+                                       for model in self.models])
+        # return the most frequent prediction
+        # the result is converted into a 1xN np array
+        return stats.mode(predictions, axis=1)[0].T[0]
+
+    def predict_proba(self, X):
+        predictions = [model.predict_proba(X) for model in self.models]
+        return sum(predictions) / len(self.models)
 
 
 class ModelStacking(BaseEstimator, RegressorMixin, TransformerMixin):
