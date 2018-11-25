@@ -70,10 +70,11 @@ def _lgb_cv(x_train, y_train, **param_set):
     feature_fraction_seed = param_set.get('feature_fraction_seed',
                                           random_state)
     bagging_seed = param_set.get('bagging_seed', random_state)
-    lgb_model = lgb.LGBMRegressor(n_estimators=5000, n_jobs=-1,
-                                  random_state=random_state,
+    lgb_model = lgb.LGBMRegressor(n_estimators=5000,
+                                  seed=random_state,
                                   feature_fraction_seed=feature_fraction_seed,
-                                  bagging_seed=bagging_seed)
+                                  bagging_seed=bagging_seed,
+                                  verbose=-1)
     lgb_model.set_params(**param_set)
     lgb_params = lgb_model.get_params()
     # Use .pop() to prevent warning
@@ -103,23 +104,25 @@ def _lgb_cv(x_train, y_train, **param_set):
             n_estimators,
             None,
             None,
-            lgb_cv_result.loc[n_estimators- 1, 'rmse-mean'],
-            lgb_cv_result.loc[n_estimators- 1, 'rmse-stdv'],
+            lgb_cv_result.loc[n_estimators - 1, 'rmse-mean'],
+            lgb_cv_result.loc[n_estimators - 1, 'rmse-stdv'],
             lgb_cv_result,
             lgb_model]
 
 
 def _cb_cv(x_train, y_train, **param_set):
     random_state = param_set.get('random_state', 0)
-    cb_model = cb.CatBoostRegressor(n_estimators=5000, loss_function='RMSE')
+    cb_model = cb.CatBoostRegressor(n_estimators=5000, loss_function='RMSE',
+                                    random_state=random_state,
+                                    verbose=False)
     cb_model.set_params(**param_set)
     cb_params = cb_model.get_params()
     n_estimators = cb_params.pop('iterations')
     cb_pool = cb.Pool(x_train, label=y_train)
 
     cb_cv_result = cb.cv(
-        cb_pool,
-        cb_params,
+        pool=cb_pool,
+        params=cb_params,
         num_boost_round=n_estimators,
         nfold=10,
         early_stopping_rounds=10,
@@ -172,7 +175,6 @@ def _run_cv(x_train, y_train,
         sensi_mean = pd.Series(test_rmse_mean, index=all_params)
         sensi_std = pd.Series(test_rmse_std, index=all_params)
         sensi_mean.to_frame().plot(kind='barh', xerr=sensi_std, figsize=(8, 6))
-
     # show result on the best CV result
     best_params = cv_summary[arg_min][0]
     best_cv_result = cv_summary[arg_min][6]
@@ -323,8 +325,7 @@ def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
     subsample = model.get_xgb_params()['subsample']
     colsample_bytree = model.get_xgb_params()['colsample_bytree']
 
-    if ((subsample == 0.1 and colsample_bytree == 0.1) or
-        (subsample == 1.0 and colsample_bytree == 1.0)):
+    if subsample in [0.1, 1.0] and colsample_bytree in [0.1, 1.0]:
         # already optimal
         pass
     else:
@@ -361,7 +362,7 @@ def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
         'gamma': gamma,
         'subsample': subsample,
         'colsample_bytree': colsample_bytree,
-        'reg_alpha': [0, 1e-5, 1e-2, 0.1, 1, 100],
+        'reg_alpha': [0, 1e-5, 1e-2, 0.1, 1, 10, 100],
     })
     model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
     reg_alpha = model.get_xgb_params()['reg_alpha']
@@ -377,7 +378,7 @@ def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
         'subsample': subsample,
         'colsample_bytree': colsample_bytree,
         'reg_alpha': reg_alpha,
-        'reg_lambda': [0, 1e-5, 1e-2, 0.1, 1, 100],
+        'reg_lambda': [0, 1e-5, 1e-2, 0.1, 1, 10, 100],
     })
     model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
     reg_lambda = model.get_xgb_params()['reg_lambda']
@@ -397,5 +398,159 @@ def run_xgb_optimise(X, y, plot_result=False, **xgb_params):
         'learning_rate': [.3, .2, .1, .05, .01, .005]
     })
     model = run_xgb_cv(X, y, plot_result=plot_result, **xgb_params)
+
+    return model
+
+
+def run_lgb_optimise(X, y, plot_result=False, **lgb_params):
+    def _log_header(text):
+        logger.info('\n------------------------------------------------------\n'
+                    '\t {}\n'
+                    '------------------------------------------------------'
+                    .format(text))
+
+    # --------------------------------------------------------------------------
+    # num_leaves and max_bin
+    # --------------------------------------------------------------------------
+    _log_header('num_leaves and max_bin')
+    lgb_params.update({
+        'num_leaves': list(range(2, 6)) + list(range(6, 50, 5)),
+        'max_bin': [8, 16, 32, 64, 128, 255, 512]
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    num_leaves = model.get_params()['num_leaves']
+    max_bin = model.get_params()['max_bin']
+
+    logger.info('Trying finer grids')
+    lgb_params.update({
+        'num_leaves': num_leaves,
+        'max_bin': [int(max_bin / (2 ** 0.5)), max_bin,
+                    int(max_bin * (2 ** 0.5))]
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    num_leaves = model.get_params()['num_leaves']
+    max_bin = model.get_params()['max_bin']
+
+    # --------------------------------------------------------------------------
+    # max_depth
+    # --------------------------------------------------------------------------
+    _log_header('max_depth')
+    lgb_params.update({
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'max_depth': list(range(1, 11))
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    max_depth = model.get_params()['max_depth']
+
+    # --------------------------------------------------------------------------
+    # min_data_in_leaf and min_sum_hessian_in_leaf
+    # --------------------------------------------------------------------------
+    _log_header('min_data_in_leaf and min_sum_hessian_in_leaf')
+    lgb_params.update({
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_data_in_leaf': list(range(5, 40, 5)),
+        'min_sum_hessian_in_leaf': [1e-5, 1e-4, 1e-3, 1e-2]
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    min_data_in_leaf = model.get_params()['min_data_in_leaf']
+    min_sum_hessian_in_leaf = model.get_params()['min_sum_hessian_in_leaf']
+
+    # --------------------------------------------------------------------------
+    # bagging_fraction and bagging_freq
+    # --------------------------------------------------------------------------
+    _log_header('bagging_fraction and bagging_freq')
+    bagging_fraction_list = [i / 10 for i in range(1, 11, 2)] + [1.0]
+    bagging_freq_list = [1, 5, 10]
+
+    lgb_params.update({
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_data_in_leaf': min_data_in_leaf,
+        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
+        'bagging_fraction': bagging_fraction_list,
+        'bagging_freq': bagging_freq_list,
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    bagging_fraction = model.get_params()['bagging_fraction']
+    bagging_freq = model.get_params()['bagging_freq']
+
+    # --------------------------------------------------------------------------
+    # feature_fraction
+    # --------------------------------------------------------------------------
+    _log_header('feature_fraction')
+    feature_fraction_list = [i / 10 for i in range(1, 11)]
+
+    lgb_params.update({
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_data_in_leaf': min_data_in_leaf,
+        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
+        'bagging_fraction': bagging_fraction,
+        'bagging_freq': bagging_freq,
+        'feature_fraction': feature_fraction_list,
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    feature_fraction = model.get_params()['feature_fraction']
+
+    # --------------------------------------------------------------------------
+    # reg_alpha
+    # --------------------------------------------------------------------------
+    _log_header('reg_alpha')
+    lgb_params.update({
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_data_in_leaf': min_data_in_leaf,
+        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
+        'bagging_fraction': bagging_fraction,
+        'bagging_freq': bagging_freq,
+        'feature_fraction': feature_fraction,
+        'reg_alpha': [0, 1e-5, 1e-2, 0.1, 1, 100],
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    reg_alpha = model.get_params()['reg_alpha']
+
+    # --------------------------------------------------------------------------
+    # reg_lambda
+    # --------------------------------------------------------------------------
+    _log_header('reg_lambda')
+    lgb_params.update({
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_data_in_leaf': min_data_in_leaf,
+        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
+        'bagging_fraction': bagging_fraction,
+        'bagging_freq': bagging_freq,
+        'feature_fraction': feature_fraction,
+        'reg_alpha': reg_alpha,
+        'reg_lambda': [0, 1e-5, 1e-2, 0.1, 1, 100],
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
+    reg_lambda = model.get_params()['reg_lambda']
+
+    # --------------------------------------------------------------------------
+    # learning_rate
+    # --------------------------------------------------------------------------
+    _log_header('learning_rate')
+    lgb_params.update({
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'max_bin': max_bin,
+        'min_data_in_leaf': min_data_in_leaf,
+        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
+        'bagging_fraction': bagging_fraction,
+        'bagging_freq': bagging_freq,
+        'feature_fraction': feature_fraction,
+        'reg_alpha': reg_alpha,
+        'reg_lambda': reg_lambda,
+        'learning_rate': [.3, .2, .1, .05, .01, .005]
+    })
+    model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
 
     return model
