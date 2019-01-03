@@ -554,3 +554,81 @@ def run_lgb_optimise(X, y, plot_result=False, **lgb_params):
     model = run_lgb_cv(X, y, plot_result=plot_result, **lgb_params)
 
     return model
+
+
+def run_cb_optimise(X, y, plot_result=False, **cb_params):
+    def _log_header(text):
+        logger.info('\n----------------------------------------------------\n'
+                    '\t {}\n'
+                    '----------------------------------------------------'
+                    .format(text))
+
+    # --------------------------------------------------------------------
+    # depth and border_count (max_bin)
+    # --------------------------------------------------------------------
+    _log_header('depth and border_count')
+    depth_list = list(range(1, 10, 2))
+
+    cb_params.update({
+        'depth': depth_list,
+        'border_count': [8, 16, 32, 64, 128, 255]
+    })
+    model = run_cb_cv(X, y, plot_result=plot_result, **cb_params)
+    depth = model.get_params()['depth']
+    border_count = model.get_params()['border_count']
+
+    # --------------------------------------------------------------------
+    # l2_leaf_reg (reg_lambda)
+    # --------------------------------------------------------------------
+    _log_header('l2_leaf_reg')
+    cb_params.update({
+        'depth': depth,
+        'border_count': border_count,
+        'l2_leaf_reg': [0, 1e-5, 1e-2, 0.1, 1, 100],
+    })
+    model = run_cb_cv(X, y, plot_result=plot_result, **cb_params)
+    l2_leaf_reg = model.get_params()['l2_leaf_reg']
+
+    # --------------------------------------------------------------------
+    # bagging_temperature
+    # --------------------------------------------------------------------
+    _log_header('bagging_temperature')
+    cb_params.update({
+        'depth': depth,
+        'border_count': border_count,
+        'l2_leaf_reg': l2_leaf_reg,
+        'bagging_temperature': [0.01, 0.1, 0.25, 0.5, 0.75, 1, 2, 4, 8, 16, 32],
+    })
+    model = run_cb_cv(X, y, plot_result=plot_result, **cb_params)
+    bagging_temperature = model.get_params()['bagging_temperature']
+
+    # --------------------------------------------------------------------
+    # random_strength
+    # --------------------------------------------------------------------
+    _log_header('random_strength')
+    cb_params.update({
+        'depth': depth,
+        'border_count': border_count,
+        'l2_leaf_reg': l2_leaf_reg,
+        'bagging_temperature': bagging_temperature,
+        'random_strength': [0.01, 0.1, 0.25, 0.5, 0.75, 1, 2, 4, 8, 16, 32],
+    })
+    model = run_cb_cv(X, y, plot_result=plot_result, **cb_params)
+    random_strength = model.get_params()['random_strength']
+
+    # --------------------------------------------------------------------
+    # learning_rate
+    # --------------------------------------------------------------------
+    _log_header('learning_rate')
+    cb_params.update({
+        'depth': depth,
+        'border_count': border_count,
+        'l2_leaf_reg': l2_leaf_reg,
+        'bagging_temperature': bagging_temperature,
+        'random_strength': random_strength,
+        'learning_rate': [.3, .2, .1, .05, .03, .01, .005],
+    })
+    model = run_cb_cv(X, y, plot_result=plot_result, **cb_params)
+    learning_rate = model.get_params()['learning_rate']
+
+    return model
