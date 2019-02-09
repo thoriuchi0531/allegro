@@ -4,7 +4,7 @@ import pandas as pd
 import xgboost as xgb
 import lightgbm as lgb
 import catboost as cb
-from hyperopt import tpe
+from hyperopt import tpe, Trials
 from sklearn.datasets import load_boston, load_breast_cancer
 from ..model_selection import (optimise_hyper_params, XGB_DEFAULT_SPACE,
                                LGB_DEFAULT_SPACE, CB_DEFAULT_SPACE)
@@ -24,7 +24,7 @@ class TestCv(unittest.TestCase):
             cls=xgb.XGBRegressor,
             X=self.reg_x_data,
             y=self.reg_y_data,
-            estimator_params={'n_estimators': 250,
+            estimator_params={'n_estimators': 100,
                               'learning_rate': 0.05,
                               'n_jobs': -1,
                               'random_state': 0},
@@ -36,13 +36,13 @@ class TestCv(unittest.TestCase):
             max_evals=10,
             verbose=True
         )
-        self.assertTrue(isinstance(best, dict))
+        self.assertTrue(isinstance(best, Trials))
 
         best = optimise_hyper_params(
             cls=xgb.XGBClassifier,
             X=self.cls_x_data,
             y=self.cls_y_data,
-            estimator_params={'n_estimators': 250,
+            estimator_params={'n_estimators': 100,
                               'learning_rate': 0.05,
                               'n_jobs': -1,
                               'random_state': 0},
@@ -54,14 +54,14 @@ class TestCv(unittest.TestCase):
             max_evals=10,
             verbose=True
         )
-        self.assertTrue(isinstance(best, dict))
+        self.assertTrue(isinstance(best, Trials))
 
     def test_optimise_lgb(self):
         best = optimise_hyper_params(
             cls=lgb.LGBMRegressor,
             X=self.reg_x_data,
             y=self.reg_y_data,
-            estimator_params={'n_estimators': 250,
+            estimator_params={'n_estimators': 100,
                               'learning_rate': 0.05,
                               'n_jobs': -1,
                               'random_state': 0,
@@ -76,13 +76,13 @@ class TestCv(unittest.TestCase):
             max_evals=10,
             verbose=True
         )
-        self.assertTrue(isinstance(best, dict))
+        self.assertTrue(isinstance(best, Trials))
 
         best = optimise_hyper_params(
             cls=lgb.LGBMClassifier,
             X=self.cls_x_data,
             y=self.cls_y_data,
-            estimator_params={'n_estimators': 250,
+            estimator_params={'n_estimators': 100,
                               'learning_rate': 0.05,
                               'n_jobs': -1,
                               'random_state': 0,
@@ -97,14 +97,14 @@ class TestCv(unittest.TestCase):
             max_evals=10,
             verbose=True
         )
-        self.assertTrue(isinstance(best, dict))
+        self.assertTrue(isinstance(best, Trials))
 
     def test_optimise_cb(self):
         best = optimise_hyper_params(
             cls=cb.CatBoostRegressor,
             X=self.reg_x_data,
             y=self.reg_y_data,
-            estimator_params={'n_estimators': 250,
+            estimator_params={'n_estimators': 100,
                               'learning_rate': 0.05,
                               'random_state': 0,
                               'verbose': False},
@@ -116,13 +116,13 @@ class TestCv(unittest.TestCase):
             max_evals=1,
             verbose=True
         )
-        self.assertTrue(isinstance(best, dict))
+        self.assertTrue(isinstance(best, Trials))
 
         best = optimise_hyper_params(
             cls=cb.CatBoostClassifier,
             X=self.cls_x_data,
             y=self.cls_y_data,
-            estimator_params={'n_estimators': 250,
+            estimator_params={'n_estimators': 100,
                               'learning_rate': 0.05,
                               'random_state': 0,
                               'verbose': False},
@@ -134,4 +134,4 @@ class TestCv(unittest.TestCase):
             max_evals=1,
             verbose=True
         )
-        self.assertTrue(isinstance(best, dict))
+        self.assertTrue(isinstance(best, Trials))

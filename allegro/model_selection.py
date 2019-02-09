@@ -1,4 +1,5 @@
-from hyperopt import hp
+from datetime import datetime
+from hyperopt import hp, STATUS_OK, Trials
 from hyperopt.fmin import fmin
 from hyperopt.pyll.base import scope
 from sklearn.model_selection import cross_val_score
@@ -22,7 +23,8 @@ LGB_DEFAULT_SPACE = {
     'max_bin': scope.int(hp.qloguniform('max_bin', 1, 7, 1)),
     'max_depth': scope.int(hp.quniform('max_depth', 2, 10, 1)),
     'min_data_in_leaf': scope.int(hp.quniform('min_data_in_leaf', 5, 50, 5)),
-    'min_sum_hessian_in_leaf': hp.loguniform('min_sum_hessian_in_leaf', -12, -3),
+    'min_sum_hessian_in_leaf': hp.loguniform('min_sum_hessian_in_leaf', -12,
+                                             -3),
     'bagging_fraction': hp.quniform('bagging_fraction', 0.5, 1.0, 0.1),
     'bagging_freq': hp.choice('bagging_freq', [1, 5, 10]),
     'feature_fraction': hp.quniform('feature_fraction', 0.5, 1.0, 0.1),
@@ -54,10 +56,17 @@ def optimise_hyper_params(cls, X, y, estimator_params, cv_params, space, algo,
             score = - raw_score
         else:
             score = raw_score
-        return score
+        result = {
+            'loss': score,
+            'eval_time': datetime.now(),
+            'status': STATUS_OK,
+        }
+        return result
 
-    best = fmin(fn=objective,
-                space=space,
-                algo=algo,
-                max_evals=max_evals)
-    return best
+    trials = Trials()
+    fmin(fn=objective,
+         space=space,
+         algo=algo,
+         max_evals=max_evals,
+         trials=trials)
+    return trials
