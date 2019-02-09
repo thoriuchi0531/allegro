@@ -24,6 +24,7 @@ setup(name='allegro',
           'lightgbm',
           'catboost',
           'matplotlib',
+          'hyperopt',
           'tqdm'
       ],
       zip_safe=False,

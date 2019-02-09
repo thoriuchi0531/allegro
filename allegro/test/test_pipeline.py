@@ -2,9 +2,10 @@ import unittest
 import numpy as np
 import pandas as pd
 from sklearn.datasets import load_boston
-from ..pipeline import (FilterXGBImportance, FilterLGBImportance,
-                        ConvertNaNs, FillNa, GroupFillNa,
+from ..pipeline import (FilterByImportance, ConvertNaNs, FillNa, GroupFillNa,
                         ConditionalFillNa, ConvertStrToInt)
+import xgboost as xgb
+import lightgbm as lgb
 
 
 class TestPipeline(unittest.TestCase):
@@ -15,7 +16,8 @@ class TestPipeline(unittest.TestCase):
 
     def test_filter_xgb_importance_threshold(self):
         """ Filter based on threshold """
-        pipeline = FilterXGBImportance(threshold='mean')
+        estimator = xgb.XGBRegressor()
+        pipeline = FilterByImportance(estimator=estimator, threshold='mean')
         pipeline.fit(self.x_data, self.y_data)
         filtered = pipeline.transform(self.x_data)
 
@@ -26,7 +28,8 @@ class TestPipeline(unittest.TestCase):
 
     def test_filter_xgb_importance_n_features(self):
         """ Filter based on the number of features """
-        pipeline = FilterXGBImportance(n_features=3)
+        estimator = xgb.XGBRegressor()
+        pipeline = FilterByImportance(estimator=estimator, n_features=3)
         pipeline.fit(self.x_data, self.y_data)
         filtered = pipeline.transform(self.x_data)
 
@@ -37,7 +40,8 @@ class TestPipeline(unittest.TestCase):
 
     def test_filter_lgb_importance_threshold(self):
         """ Filter based on threshold """
-        pipeline = FilterLGBImportance(threshold='mean')
+        estimator = lgb.LGBMRegressor(verbose=-1)
+        pipeline = FilterByImportance(estimator=estimator, threshold='mean')
         pipeline.fit(self.x_data, self.y_data)
         filtered = pipeline.transform(self.x_data)
 
@@ -48,7 +52,8 @@ class TestPipeline(unittest.TestCase):
 
     def test_filter_lgb_importance_n_features(self):
         """ Filter based on the number of features """
-        pipeline = FilterLGBImportance(n_features=3)
+        estimator = lgb.LGBMRegressor(verbose=-1)
+        pipeline = FilterByImportance(estimator=estimator, n_features=3)
         pipeline.fit(self.x_data, self.y_data)
         filtered = pipeline.transform(self.x_data)
 
@@ -127,4 +132,3 @@ class TestPipeline(unittest.TestCase):
                   .fit_transform(X))
         self.assertEqual(result.loc[0, 'a'], 1)
         self.assertEqual(result.loc[1, 'a'], 0)
-

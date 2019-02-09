@@ -11,8 +11,6 @@ from sklearn.model_selection import KFold
 from sklearn.pipeline import FeatureUnion
 from sklearn.preprocessing import Imputer
 
-from .cv import run_xgb_cv, run_lgb_cv
-
 
 # ------------------------------------------------------------------------------
 # filter
@@ -51,11 +49,10 @@ class FilterUnique(BaseEstimator, TransformerMixin):
             raise NotImplementedError()
 
 
-class _FilterImportance(SelectFromModel):
-    def __init__(self, threshold=None, prefit=False, norm_order=1,
-                 n_features=None, **params):
-        super(_FilterImportance, self).__init__(None, threshold,
-                                                prefit, norm_order)
+class FilterByImportance(SelectFromModel):
+    def __init__(self, estimator=None, threshold=None, prefit=False,
+                 norm_order=1, n_features=None, **params):
+        super().__init__(estimator, threshold, prefit, norm_order)
         self.n_features = n_features
         self.params = params
 
@@ -73,7 +70,7 @@ class _FilterImportance(SelectFromModel):
 
     def _get_support_mask(self):
         if self.threshold is not None:
-            return super(_FilterImportance, self)._get_support_mask()
+            return super()._get_support_mask()
         elif self.n_features is not None:
             if self.prefit:
                 estimator = self.estimator
@@ -101,18 +98,6 @@ class _FilterImportance(SelectFromModel):
         mask = self.get_support()
         # .transform() is not used to support non-numeric types
         return X.loc[:, mask]
-
-
-class FilterXGBImportance(_FilterImportance):
-    def fit(self, X, y=None, **fit_params):
-        self.estimator_ = run_xgb_cv(X, y, plot_result=False)
-        return self
-
-
-class FilterLGBImportance(_FilterImportance):
-    def fit(self, X, y=None, **fit_params):
-        self.estimator_ = run_lgb_cv(X, y, plot_result=False)
-        return self
 
 
 # ------------------------------------------------------------------------------
@@ -169,9 +154,7 @@ class ConvertNaNs(Imputer):
         self.col_all = None
         self.cols_to_convert = None
         self.target_columns = target_columns
-        super(ConvertNaNs, self).__init__(
-            missing_values, strategy, axis, verbose, copy
-        )
+        super().__init__(missing_values, strategy, axis, verbose, copy)
 
     def fit(self, X, *_):
         self.col_all = X.columns
@@ -181,13 +164,13 @@ class ConvertNaNs(Imputer):
             self.cols_to_convert = [self.target_columns]
         elif isinstance(self.target_columns, list):
             self.cols_to_convert = self.target_columns
-        super(ConvertNaNs, self).fit(X[self.cols_to_convert])
+        super().fit(X[self.cols_to_convert])
         return self
 
     def transform(self, X, *_):
         col_original = X.columns
         col_others = list(set(self.col_all) - set(self.cols_to_convert))
-        transformed = super(ConvertNaNs, self).transform(X[self.cols_to_convert])
+        transformed = super().transform(X[self.cols_to_convert])
         transformed = pd.DataFrame(transformed, index=X.index,
                                    columns=self.cols_to_convert)
         result = pd.concat((
@@ -225,7 +208,7 @@ class FillNa(BaseEstimator, TransformerMixin):
 
 class GroupFillNa(FillNa):
     def __init__(self, strategy, target_columns):
-        super(GroupFillNa, self).__init__(strategy, target_columns)
+        super().__init__(strategy, target_columns)
 
     def transform(self, X, *_):
         X = X.copy(True)
@@ -283,11 +266,11 @@ class ConvertOneHotEncoding(BaseEstimator, TransformerMixin):
             warnings.warn(
                 '\nPresent in the original but missing in the transformed. '
                 'Filled with 0s: {}\n'
-                .format(in_original_not_in_new))
+                    .format(in_original_not_in_new))
             warnings.warn(
                 '\nPresent in the transformed but missing in the original. '
                 'Removed: {}\n'
-                .format(not_in_original_in_new))
+                    .format(not_in_original_in_new))
 
         result = pd.concat((
             X[col_others],
@@ -301,8 +284,9 @@ class ConvertOneHotEncoding(BaseEstimator, TransformerMixin):
 # ------------------------------------------------------------------------------
 class FeatureUnionDF(FeatureUnion):
     def transform(self, X, y=None):
-        Xs = Parallel(n_jobs=self.n_jobs)(delayed(_transform_one)(trans, weight, X)
-                                          for name, trans, weight in self._iter())
+        Xs = Parallel(n_jobs=self.n_jobs)(
+            delayed(_transform_one)(trans, weight, X)
+            for name, trans, weight in self._iter())
         Xs = pd.concat(Xs, axis=1)
         return Xs
 
