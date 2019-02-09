@@ -46,12 +46,14 @@ def optimise_hyper_params(cls, X, y, estimator_params, cv_params, space, algo,
         greater_is_better = cv_params.pop('greater_is_better', True)
 
         estimator = cls(**estimator_params, **params)
-        score = cross_val_score(estimator, X, y, **cv_params).mean()
+        raw_score = cross_val_score(estimator, X, y, **cv_params).mean()
+        if verbose:
+            logger.info("Score {}, params {}".format(raw_score, params))
         if greater_is_better:
             # hyperopt minimises the score
-            score *= -1
-        if verbose:
-            logger.info("Score {}, params {}".format(score, params))
+            score = - raw_score
+        else:
+            score = raw_score
         return score
 
     best = fmin(fn=objective,
