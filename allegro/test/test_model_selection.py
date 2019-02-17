@@ -6,6 +6,7 @@ import lightgbm as lgb
 import catboost as cb
 from hyperopt import tpe, Trials
 from sklearn.datasets import load_boston, load_breast_cancer
+from sklearn.model_selection import StratifiedKFold
 from ..model_selection import (optimise_hyper_params, XGB_DEFAULT_SPACE,
                                LGB_DEFAULT_SPACE, CB_DEFAULT_SPACE)
 
@@ -132,6 +133,25 @@ class TestCv(unittest.TestCase):
             space=CB_DEFAULT_SPACE,
             algo=tpe.suggest,
             max_evals=1,
+            verbose=True
+        )
+        self.assertTrue(isinstance(best, Trials))
+
+    def test_stratified_cv(self):
+        best = optimise_hyper_params(
+            cls=xgb.XGBClassifier,
+            X=self.cls_x_data,
+            y=self.cls_y_data,
+            estimator_params={'n_estimators': 100,
+                              'learning_rate': 0.05,
+                              'n_jobs': -1,
+                              'random_state': 0},
+            cv_params={'scoring': 'accuracy',
+                       'cv': StratifiedKFold(n_splits=5),
+                       'greater_is_better': True},
+            space=XGB_DEFAULT_SPACE,
+            algo=tpe.suggest,
+            max_evals=10,
             verbose=True
         )
         self.assertTrue(isinstance(best, Trials))

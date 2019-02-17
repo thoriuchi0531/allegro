@@ -19,12 +19,12 @@ XGB_DEFAULT_SPACE = {
 }
 
 LGB_DEFAULT_SPACE = {
+    'boosting_type': hp.choice('boosting_type', ['gbdt', 'dart']),
     'num_leaves': scope.int(hp.quniform('num_leaves', 2, 50, 1)),
     'max_bin': scope.int(hp.qloguniform('max_bin', 1, 7, 1)),
     'max_depth': scope.int(hp.quniform('max_depth', 2, 10, 1)),
     'min_data_in_leaf': scope.int(hp.quniform('min_data_in_leaf', 5, 50, 5)),
-    'min_sum_hessian_in_leaf': hp.loguniform('min_sum_hessian_in_leaf', -12,
-                                             -3),
+    'min_sum_hessian_in_leaf': hp.loguniform('min_sum_hessian_in_leaf', -12, -3),
     'bagging_fraction': hp.quniform('bagging_fraction', 0.5, 1.0, 0.1),
     'bagging_freq': hp.choice('bagging_freq', [1, 5, 10]),
     'feature_fraction': hp.quniform('feature_fraction', 0.5, 1.0, 0.1),
