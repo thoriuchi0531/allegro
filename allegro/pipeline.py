@@ -355,31 +355,32 @@ class BaseEnsemble(BaseEstimator, RegressorMixin, TransformerMixin):
     def __init__(self, models):
         self.models = models
 
-    def fit(self, X, y):
+    def fit(self, *args, **kwargs):
         self.models = [clone(x) for x in self.models]
         # Train cloned base models
         for model in self.models:
-            model.fit(X, y)
+            model.fit(*args, **kwargs)
         return self
 
 
 class RegressorEnsemble(BaseEnsemble):
-    def predict(self, X):
-        predictions = np.column_stack([model.predict(X)
+    def predict(self, *args, **kwargs):
+        predictions = np.column_stack([model.predict(*args, **kwargs)
                                        for model in self.models])
         return np.mean(predictions, axis=1)
 
 
 class ClassifierEnsemble(BaseEnsemble):
-    def predict(self, X):
-        predictions = np.column_stack([model.predict(X)
+    def predict(self, *args, **kwargs):
+        predictions = np.column_stack([model.predict(*args, **kwargs)
                                        for model in self.models])
         # return the most frequent prediction
         # the result is converted into a 1xN np array
         return stats.mode(predictions, axis=1)[0].T[0]
 
-    def predict_proba(self, X):
-        predictions = [model.predict_proba(X) for model in self.models]
+    def predict_proba(self, *args, **kwargs):
+        predictions = [model.predict_proba(*args, **kwargs)
+                       for model in self.models]
         return sum(predictions) / len(self.models)
 
 
