@@ -8,7 +8,7 @@ from .log import get_logger
 
 logger = get_logger(__name__)
 
-XGB_DEFAULT_SPACE = {
+_XGB_DEFAULT_COMMON = {
     'max_depth': scope.int(hp.quniform('max_depth', 2, 10, 1)),
     'min_child_weight': scope.int(hp.quniform('min_child_weight', 2, 10, 1)),
     'gamma': hp.quniform('gamma', 0.0, 0.5, 0.1),
@@ -17,6 +17,19 @@ XGB_DEFAULT_SPACE = {
     'reg_alpha': hp.loguniform('reg_alpha', -10, 5),
     'reg_lambda': hp.loguniform('reg_lambda', -10, 5),
 }
+
+XGB_DEFAULT_SPACE = hp.choice('booster', [
+    {
+        'booster': 'gbtree',
+        **_XGB_DEFAULT_COMMON
+    },
+    {
+        'booster': 'dart',
+        'rate_drop': hp.quniform('rate_drop', 0.0, 1.0, 0.1),
+        'skip_drop': hp.quniform('skip_drop', 0.0, 1.0, 0.1),
+        **_XGB_DEFAULT_COMMON
+    }
+])
 
 LGB_DEFAULT_SPACE = {
     'boosting_type': hp.choice('boosting_type', ['gbdt', 'dart']),
