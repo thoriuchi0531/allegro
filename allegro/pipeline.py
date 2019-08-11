@@ -385,11 +385,10 @@ class ClassifierEnsemble(BaseEnsemble):
 
 
 class ModelStacking(BaseEstimator, RegressorMixin, TransformerMixin):
-    def __init__(self, base_models, meta_model, n_folds=5, random_state=0):
+    def __init__(self, base_models, meta_model, cv):
         self.base_models = base_models
         self.meta_model = meta_model
-        self.n_folds = n_folds
-        self.random_state = random_state
+        self.cv = cv
 
     def fit(self, X, y):
         if isinstance(y, pd.Series):
@@ -403,15 +402,13 @@ class ModelStacking(BaseEstimator, RegressorMixin, TransformerMixin):
 
         self.base_models_ = []
         self.meta_model_ = clone(self.meta_model)
-        kfold = KFold(n_splits=self.n_folds, shuffle=True,
-                      random_state=self.random_state)
 
         # Train cloned base models then create out-of-fold predictions
         # that are needed to train the cloned meta-model
         out_of_fold_predictions = np.zeros((X.shape[0], len(self.base_models)))
         for i, model in enumerate(self.base_models):
             fold_models = []
-            for train_index, holdout_index in kfold.split(X, y):
+            for train_index, holdout_index in self.cv.split(X, y):
                 instance = clone(model)
                 instance.fit(X.iloc[train_index, :], y.iloc[train_index])
                 y_pred = instance.predict(X.iloc[holdout_index, :])
